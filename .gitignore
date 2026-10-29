@@ -1,6 +1,19 @@
+# Explicit publication allowlist. Build/signing artifacts stay out of Git.
 *
 !.gitignore
 !README.md
+!LICENSE
+!BUILDING.md
+!SECURITY.md
+!THIRD_PARTY_NOTICES.md
+!build.sh
+!src/
+src/*
+!src/*.swift
+!tools/
+tools/*
+!tools/main.swift
 !assets/
 assets/*
 !assets/app-icon.png
+!assets/AppIcon.svg

@@ -1,0 +1,80 @@
+SIDECAR NONCOMMERCIAL SOURCE-AVAILABLE LICENSE 1.0
+
+Copyright (c) 2026 Daniel Hanna.
+
+1. Scope
+
+This license applies to the source code, software, documentation, and original
+artwork made available under this license (the "Software"), to the extent Daniel
+Hanna (the "Licensor") has the right to license them. It does not license third-party
+components, Apple frameworks, Apple symbols, or third-party trademarks.
+
+2. Noncommercial permission
+
+Subject to all conditions below, the Licensor grants permission, without a license
+fee, to access, study, use, copy, modify, and redistribute the Software and works
+based on it solely for noncommercial purposes. All rights not granted are reserved.
+
+3. Commercial use requires prior written permission
+
+No commercial use of the Software or a work based on it is permitted without a
+separate prior written authorization from the Licensor. This restriction applies
+to both source code and compiled versions, whether original or modified.
+
+Commercial use includes:
+(a) using the Software to perform paid work or as part of business or professional
+    operations, even when the Software itself is not sold;
+(b) selling, renting, sublicensing for a fee, or charging for a copy of or access
+    to the Software or a work based on it;
+(c) incorporating or bundling the Software or its code in a commercial product;
+(d) using the Software to provide a paid service; and
+(e) other use intended for commercial advantage or financial compensation.
+
+Free distribution does not make an otherwise commercial use noncommercial.
+No commercial permission is implied by public availability, a download, silence,
+or acceptance of a contribution. Contact the Licensor for separate written terms.
+
+4. Source must accompany redistribution
+
+When redistributing the Software or a work based on it, including a compiled app,
+you must provide recipients with the complete corresponding source code in its
+preferred form for modification, including changes and the scripts and instructions
+needed to build that version. Source may accompany the distribution or be provided
+through a freely accessible download link that remains available for as long as
+you distribute that version. An executable, obfuscated code, or a link to a different
+version is not sufficient. System tools and third-party components not covered by
+this license need not be redistributed where their own licenses do not require it.
+
+5. Same terms for redistributed changes
+
+You must distribute the Software and modifications or derivative works based on
+it under this same license, preserving these noncommercial and source-sharing
+conditions. You may not offer a less restrictive license or add restrictions that
+remove the noncommercial permissions granted here. Separate written permission
+from the Licensor is required for an exception. This condition does not require
+publication of private modifications that you do not redistribute.
+
+6. Notices and attribution
+
+Keep this license and applicable copyright and attribution notices with all copies
+and source distributions. Identify modifications and their authors, and do not
+present modified versions as official releases by the Licensor. No permission to
+use a name, trademark, or logo to imply endorsement is granted.
+
+7. Compliance and termination
+
+The permissions in this license are conditional on compliance with its terms.
+If you breach them, your permissions terminate. Rights that cannot lawfully be
+restricted, including applicable statutory exceptions, are not restricted by this
+license. Reinstatement or other permission requires the Licensor's written consent.
+
+8. No warranty or liability
+
+To the extent permitted by applicable law, the Software is provided "as is", without
+warranty of any kind, including merchantability, fitness for a particular purpose,
+and noninfringement. The Licensor and contributors are not liable for claims,
+damages, or other liability arising from the Software or its use.
+
+This is a custom source-available license. Because it restricts commercial use, it
+is not an OSI-approved open-source license. You may request commercial permission
+from Daniel Hanna through the project's GitHub contact or issue tracker.

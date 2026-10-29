@@ -65,6 +65,18 @@ The keyboard displays US key legends. Your Mac's active input source determines 
 
 Report bugs and compatibility issues through [GitHub Issues](https://github.com/danny67999/sidecar-on-screen-keyboard/issues). Include your macOS and iPadOS versions, the affected application and steps to reproduce the problem.
 
-This repository provides release downloads, documentation and issue tracking.
+## Source and license
+
+The source code is available for personal, noncommercial study, use, modification and sharing under the [Sidecar Noncommercial Source-Available License](LICENSE).
+
+**Commercial use is prohibited without Daniel Hanna's prior written permission. This includes using the app for paid work or business operations, selling it, paid services, and incorporating its code into commercial products.** Redistributed versions and modifications must include their corresponding source under the same license.
+
+[Browse the version 1.0 source](https://github.com/danny67999/sidecar-on-screen-keyboard/tree/v1.0-source) or [download its source ZIP](https://github.com/danny67999/sidecar-on-screen-keyboard/releases/download/v1.0/Sidecar-On-Screen-Keyboard-1.0-source.zip).
+
+These are source-available terms, not an OSI-approved open-source license. Public source does not grant commercial permission. Contact Daniel Hanna through this repository to request separate written terms.
+
+See [Building from source](BUILDING.md), [Security and privacy](SECURITY.md), and [Third-party notices](THIRD_PARTY_NOTICES.md).
+
+This repository provides source code, release downloads, documentation and issue tracking.
 
 *Sidecar On-Screen Keyboard is an independent application and is not affiliated with or endorsed by Apple.*
