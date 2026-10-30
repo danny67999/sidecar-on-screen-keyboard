@@ -1,4 +1,5 @@
 import AppKit
+final class SettingsDocumentView:NSView { override var isFlipped:Bool { true } }
 
 // Small Auto Layout helpers for the grouped, System Settings-style window.
 struct SettingsBuilder {

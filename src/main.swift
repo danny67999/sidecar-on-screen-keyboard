@@ -13,7 +13,7 @@ enum FocusRules {
     }
     static func panelRect(screen: CGRect, field: CGRect?) -> CGRect {
         let width = min(940, max(300, screen.width - 24))
-        let height = min(310, screen.height * 0.46)
+        let height = (screen.height * 0.45).rounded()
         var rect = CGRect(x: screen.midX - width / 2, y: screen.minY + 12, width: width, height: height)
         if let field, rect.intersects(field) { rect.origin.y = screen.maxY - height - 12 }
         return rect
@@ -159,6 +159,7 @@ final class KeyView: NSView {
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
         setAccessibilityLabel(title)
+        toolTip = KeyboardHelp.text(title)
     }
     required init?(coder: NSCoder) { fatalError() }
     private func interactionChanged(_ down:Bool) {
@@ -357,7 +358,7 @@ final class PanelGrip: NSView {
             var frame = startingFrame
             if resizing {
                 frame.size.width = max(460,startingFrame.width + dx)
-                frame.size.height = max(owner?.roomyLayout == true ? 300 : 225,startingFrame.height - dy)
+                frame.size.height = max(owner?.minimumKeyboardHeight ?? 300,startingFrame.height - dy)
                 frame.origin.y = startingFrame.maxY - frame.height
             } else { frame.origin.x += dx; frame.origin.y += dy }
             owner?.adjustPanel(frame,resizing:resizing)
@@ -390,6 +391,10 @@ final class KeyboardView: NSView {
     var rows: [[(KeySpec, KeyView)]] = []
     let heading = NSTextField(labelWithString: "SIDECAR KEYS")
     let typingPreview = TypingPreviewView(frame:.zero)
+    let handwriting = HandwritingView(frame:.zero)
+    let inputMode:KeyView
+    var suggestionKeys:[KeyView] = []
+    private(set) var handwritingMode = false
     var page = 0
     let close: KeyView
     let snap: KeyView
@@ -401,9 +406,10 @@ final class KeyboardView: NSView {
         self.owner = owner
         moveGrip = PanelGrip(owner:owner,resizing:false)
         resizeGrip = PanelGrip(owner:owner,resizing:true)
+        inputMode = KeyView("Handwriting",action:{ [weak owner] in owner?.toggleHandwritingMode() })
         close = KeyView("Hide", action: { [weak owner] in owner?.hideManually() })
         snap = KeyView("Snap", action: { [weak owner] in owner?.toggleSnap() })
-        windowControls = KeyView("Window",action: { [weak owner] in owner?.touchAssistant?.openFromKeyboard() })
+        windowControls = KeyView("Window",action: { [weak owner] in owner?.afterHandwritingFocus { [weak owner] in owner?.touchAssistant?.openFromKeyboard() } })
         windowControls.toolTip = "Larger Close, Minimize, Zoom and app menus"
         close.toolTip = "Hide keyboard"
         super.init(frame: .zero)
@@ -418,7 +424,21 @@ final class KeyboardView: NSView {
         heading.textColor = KeyboardStyle.secondary
         addSubview(heading); addSubview(close); addSubview(snap); addSubview(windowControls)
         addSubview(typingPreview)
+        inputMode.symbolName = "pencil.tip"; inputMode.keyAppearance = .toolbar
+        inputMode.toolTip = "Write with Apple Pencil"
+        addSubview(inputMode); addSubview(handwriting); handwriting.isHidden = true
+        handwriting.canBegin = { [weak owner] in owner?.beginHandwriting() ?? false }
+        handwriting.recognized = { [weak self] title,text in self?.showHandwritingResult(title,text:text) }
+        handwriting.sendKey = { [weak owner] spec in owner?.performHandwritingKey(spec) }
+        handwriting.autoInsert = owner.autoInsertHandwriting
+        handwriting.insert = { [weak owner] in owner?.insertHandwriting() }
+        for index in 0..<3 {
+            let key = KeyView("") { [weak owner] in owner?.acceptSuggestion(index) }
+            key.keyAppearance = .toolbar; key.labelFontSize = 16; key.enabled = false
+            addSubview(key); suggestionKeys.append(key)
+        }
         close.keyAppearance = .toolbar; snap.keyAppearance = .toolbar; windowControls.keyAppearance = .toolbar
+        snap.selected = owner.snapEnabled; snap.toolTip = KeyboardHelp.snap(owner.snapEnabled)
         for title in ["Undo","Redo","Cut","Copy","Paste"] {
             let key = KeyView(title) { [weak owner] in owner?.performEditing(title) }
             key.keyAppearance = .toolbar
@@ -474,6 +494,34 @@ final class KeyboardView: NSView {
     }
     required init?(coder: NSCoder) { fatalError() }
     static let headerHeight:CGFloat = 50
+    static let suggestionHeight:CGFloat = 44
+    var accessoryHeight:CGFloat { owner?.predictiveText == true || owner?.handwritingEnabled == true ? Self.suggestionHeight : 0 }
+    func setHandwritingMode(_ enabled:Bool) {
+        cancelRepeats(); handwriting.clear(); handwritingMode = enabled
+        inputMode.selected = enabled; inputMode.symbolName = enabled ? "keyboard" : "pencil.tip"
+        inputMode.toolTip = enabled ? "Return to keyboard" : "Write with Apple Pencil"
+        handwriting.isHidden = !enabled
+        for row in rows { for (spec,key) in row { key.isHidden = enabled || spec.label.isEmpty } }
+        if enabled { showHandwritingResult(handwriting.autoInsert ? "Write — text inserts after a pause" : "Write, then tap your text here",text:nil) }
+        else { showSuggestions([]) }
+        needsLayout = true
+    }
+    func showSuggestions(_ suggestions:[TextSuggestion]) {
+        guard !handwritingMode else { return }
+        for (index,key) in suggestionKeys.enumerated() {
+            let title = index < suggestions.count ? suggestions[index].title : ""
+            key.title = title; key.setAccessibilityLabel(title.isEmpty ? "Text suggestion" : "Insert \(title)")
+            key.toolTip = title.isEmpty ? nil : "Insert the suggestion: \(title)"
+            key.enabled = !title.isEmpty; key.needsDisplay = true
+        }
+    }
+    func showHandwritingResult(_ title:String,text:String?) {
+        guard handwritingMode else { return }
+        let key = suggestionKeys[0]; key.title = title; key.enabled = text != nil
+        key.setAccessibilityLabel(text.map { "Insert handwriting: \($0)" } ?? title)
+        key.toolTip = text.map { "Insert recognized handwriting: \($0). A space is added afterward." } ?? title
+        key.action = { [weak owner] in owner?.insertHandwriting() }; key.needsDisplay = true
+    }
     override func layout() {
         super.layout()
         let header = KeyboardView.headerHeight,h = bounds.height,w = bounds.width
@@ -492,6 +540,18 @@ final class KeyboardView: NSView {
         heading.isHidden = showPreview || heading.stringValue.isEmpty
         heading.frame = CGRect(x:middle.minX,y:h-header+15,width:middle.width,height:17)
         resizeGrip.frame = CGRect(x:w-30,y:0,width:30,height:20)
+        let accessory = accessoryHeight,showPen = owner?.handwritingEnabled == true
+        inputMode.isHidden = !showPen
+        inputMode.frame = CGRect(x:8,y:h-header-accessory,width:46,height:accessory)
+        let start:CGFloat = showPen ? 60 : 8
+        let available = max(0,w-start-8)
+        for (index,key) in suggestionKeys.enumerated() {
+            key.isHidden = accessory == 0 || (handwritingMode ? index != 0 : owner?.predictiveText != true)
+            let unit = available / (handwritingMode ? 1 : 3)
+            key.frame = CGRect(x:start+CGFloat(index)*unit,y:h-header-accessory,width:unit,height:accessory)
+            if !handwritingMode { key.action = { [weak owner] in owner?.acceptSuggestion(index) } }
+        }
+        handwriting.frame = CGRect(x:0,y:0,width:w,height:max(0,h-header-accessory))
         layer?.maskedCorners = owner?.currentDock == .bottom ? [.layerMinXMaxYCorner,.layerMaxXMaxYCorner]
             : owner?.currentDock == .top ? [.layerMinXMinYCorner,.layerMaxXMinYCorner]
             : [.layerMinXMinYCorner,.layerMaxXMinYCorner,.layerMinXMaxYCorner,.layerMaxXMaxYCorner]
@@ -500,12 +560,12 @@ final class KeyboardView: NSView {
         let hasMacRow = roomy && [0,1,4].contains(page)
         let weights = rows.indices.map { hasMacRow && $0 == rows.count-1 ? CGFloat(0.72) : CGFloat(1) }
         let bottomPad:CGFloat = 12
-        let rowHeight = (h - header - bottomPad) / weights.reduce(0,+)
+        let rowHeight = (h - header - accessory - bottomPad) / weights.reduce(0,+)
         // One gap for the whole board, derived from the first row's key width.
         let baseUnit = (w - 12) / max(1,rows.first?.reduce(0) { $0 + $1.0.width } ?? 1)
         let gap = max(5,min(11,baseUnit*0.13,rowHeight*0.17))
         let side = max(3,gap/2)
-        var top = h-header
+        var top = h-header-accessory
         for (index,row) in rows.enumerated() {
             let height = rowHeight*weights[index]
             // Rounded so rows with equal unit totals get bit-identical key widths.
@@ -533,6 +593,7 @@ final class KeyboardView: NSView {
         layer?.borderColor = KeyboardStyle.hairline.cgColor
         heading.textColor = KeyboardStyle.secondary
         for view in subviews { view.needsDisplay = true }
+        handwriting.canvas.needsDisplay = true
     }
     func updateModifiers(_ modifiers: Set<String>) {
         let shifted: [String:String] = ["1":"!","2":"@","3":"#","4":"$","5":"%","6":"^","7":"&","8":"*","9":"(","0":")","−":"_","=":"+","[":"{","]":"}",";":":","'":"\"",",":"<",".":">","/":"?","`":"~","\\":"|"]
@@ -542,6 +603,7 @@ final class KeyboardView: NSView {
             if isLetter { key.title = modifiers.contains("Shift") != modifiers.contains("Caps") ? spec.label.uppercased() : spec.label }
             else { key.title = modifiers.contains("Shift") && page != 2 ? (shifted[spec.label] ?? spec.label) : spec.label }
             key.needsDisplay = true
+            key.toolTip = KeyboardHelp.text(key.title)
         }}
     }
 }
@@ -549,6 +611,8 @@ final class KeyboardView: NSView {
 final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuDelegate {
     var statusItem: NSStatusItem!
     var settings: NSWindow!
+    var settingsDocument:NSView?
+    var settingsViewportHeight:NSLayoutConstraint?
     var panel: KeyboardPanel!
     var keyboard: KeyboardView!
     var displayPicker: NSPopUpButton!
@@ -591,7 +655,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMen
     var customFrames: [String:String] = [:]
     var positioningPanel = false
     var adjustingPanel = false
-    var snapEnabled = false
+    var snapEnabled = true
     var fitActiveApp = true
     var dockedEdges:[String:String] = [:]
     var snapCandidate:DockEdge?
@@ -613,6 +677,24 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMen
     var appearancePicker:NSPopUpButton!
     var layoutPicker:NSPopUpButton!
     var showTypingPreview = true
+    var predictiveText = true
+    var handwritingEnabled = true
+    var autoInsertHandwriting = true
+    var predictionButton:NSSwitch!
+    var handwritingButton:NSSwitch!
+    var autoInsertHandwritingButton:NSSwitch!
+    var suggestions:[TextSuggestion] = []
+    var suggestionContext:FocusedTextContext?
+    var handwritingTarget:HandwritingTarget?
+    lazy var suggestionEngine:TextSuggestionEngine = {
+        let engine = TextSuggestionEngine()
+        engine.changed = { [weak self] values,context in
+            guard let self else { return }
+            self.suggestions = values; self.suggestionContext = context
+            self.keyboard?.showSuggestions(values)
+        }
+        return engine
+    }()
     var typingPreviewButton:NSSwitch!
     var previewTimer:Timer?
     var previousDarkStyle:Bool?
@@ -622,7 +704,8 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMen
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        UserDefaults.standard.register(defaults: ["appEnabled":true,"automatic":true,"fitActiveApp":true,"touchAssistEnabled":true,"selectionMenuEnabled":true,"appMenusEnabled":true,"hideOnEnter":false,"keyboardLayout":"ipad","showTypingPreview":true])
+        UserDefaults.standard.register(defaults: ["appEnabled":true,"automatic":true,"fitActiveApp":true,"touchAssistEnabled":true,"selectionMenuEnabled":true,"appMenusEnabled":true,"hideOnEnter":false,"keyboardLayout":"ipad","showTypingPreview":true,"predictiveText":true,"handwritingEnabled":true,"autoInsertHandwriting":true])
+        SnapPreferences.prepare(.standard)
         appEnabled = UserDefaults.standard.bool(forKey:"appEnabled")
         automatic = UserDefaults.standard.bool(forKey:"automatic")
         customFrames = UserDefaults.standard.dictionary(forKey:"keyboardFrames") as? [String:String] ?? [:]
@@ -635,14 +718,27 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMen
         roomyLayout = UserDefaults.standard.string(forKey:"keyboardLayout") != "compact"
         selectionMenuEnabled = UserDefaults.standard.bool(forKey:"selectionMenuEnabled")
         showTypingPreview = UserDefaults.standard.bool(forKey:"showTypingPreview")
+        predictiveText = UserDefaults.standard.bool(forKey:"predictiveText")
+        handwritingEnabled = UserDefaults.standard.bool(forKey:"handwritingEnabled")
+        autoInsertHandwriting = UserDefaults.standard.bool(forKey:"autoInsertHandwriting")
+        // Make room for the new strip once, preserving existing letter heights.
+        if !UserDefaults.standard.bool(forKey:"inputStripMigrated") {
+            for (id,value) in customFrames {
+                var frame = NSRectFromString(value); frame.size.height += KeyboardView.suggestionHeight
+                customFrames[id] = NSStringFromRect(frame)
+            }
+            UserDefaults.standard.set(customFrames,forKey:"keyboardFrames")
+            UserDefaults.standard.set(true,forKey:"inputStripMigrated")
+        }
         if let number = UserDefaults.standard.object(forKey:"display") as? NSNumber { selectedID = number.uint32Value }
         panel = KeyboardPanel(contentRect: .zero, styleMask: [.borderless,.nonactivatingPanel,.resizable], backing: .buffered, defer: false)
-        panel.minSize = NSSize(width:460,height:roomyLayout ? 300 : 225)
+        panel.minSize = NSSize(width:460,height:minimumKeyboardHeight)
         panel.title = "Sidecar Keyboard"
         panel.delegate = self
         panel.level = .floating
         panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = true
         panel.hidesOnDeactivate = false; panel.isReleasedWhenClosed = false
+        panel.allowsToolTipsWhenApplicationIsInactive = true
         panel.collectionBehavior = [.canJoinAllSpaces,.fullScreenAuxiliary,.ignoresCycle]
         panel.isMovableByWindowBackground = false
         keyboard = KeyboardView(owner: self)
@@ -654,7 +750,9 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMen
         RunLoop.main.add(timer!, forMode: .common)
         previewTimer = Timer(timeInterval:0.10,repeats:true) { [weak self] _ in self?.updateTypingPreview() }
         RunLoop.main.add(previewTimer!,forMode:.common)
-        if UserDefaults.standard.bool(forKey:"setupCompleted") { showSettings() } else { showSetup() }
+        if CommandLine.arguments.contains("--handwriting-pad"),let screen = selectedScreen {
+            manual = true; show(on:screen,field:nil); keyboard.setHandwritingMode(true)
+        } else if UserDefaults.standard.bool(forKey:"setupCompleted") { showSettings() } else { showSetup() }
     }
     func displayID(_ screen: NSScreen) -> CGDirectDisplayID {
         (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
@@ -764,12 +862,19 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMen
         autoButton = page.toggle(automatic,#selector(toggleAuto))
         typingPreviewButton = page.toggle(showTypingPreview,#selector(toggleTypingPreview))
         hideOnEnterButton = page.toggle(hideOnEnter,#selector(toggleHideOnEnter))
+        predictionButton = page.toggle(predictiveText,#selector(togglePredictions))
+        handwritingButton = page.toggle(handwritingEnabled,#selector(toggleHandwritingEnabled))
+        autoInsertHandwritingButton = page.toggle(autoInsertHandwriting,#selector(toggleAutoInsertHandwriting))
         let keyboardGroup = page.group([
             page.row(title:"Layout",control:layoutPicker),
             page.row(title:"Appearance",control:appearancePicker),
             page.row(title:"Show automatically",detail:"Appears when you tap a text field on the iPad display.",control:autoButton),
             page.row(title:"Live typing preview",detail:"Shows the text around your cursor above the keys. Password fields are never shown.",control:typingPreviewButton),
             page.row(title:"Hide after Return",detail:"Shift-Return keeps the keyboard open.",control:hideOnEnterButton)])
+        let writing = page.group([
+            page.row(title:"Predictive text",detail:"Tap macOS word suggestions above the keys.",control:predictionButton),
+            page.row(title:"Handwriting",detail:"Use the pencil button to write with Apple Pencil.",control:handwritingButton),
+            page.row(title:"Insert handwriting automatically",detail:"Inserts after a pause, with a space after each word. Turn off to review first.",control:autoInsertHandwritingButton)])
 
         touchAssistButton = page.toggle(touchAssistEnabled,#selector(toggleTouchAssist))
         selectionMenuButton = page.toggle(selectionMenuEnabled,#selector(toggleSelectionMenu))
@@ -784,23 +889,23 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMen
         page.size(keyboardPreview,332,(332*350/1060).rounded())
         let preview = page.group([page.padded(keyboardPreview,horizontal:14,vertical:12)])
         let sections = [page.section("Status",status),page.section("Keyboard",keyboardGroup),page.section("Preview",preview),
-                        page.section("Touch Helpers",touch),page.section("Display",display),page.section("Docking",docking)]
+                        page.section("Touch Helpers",touch),page.section("Display",display),page.section("Docking",docking),page.section("Writing",writing)]
         let left = page.column([sections[0],sections[2],sections[4],sections[5]],spacing:18)
-        let right = page.column([sections[1],sections[3]],spacing:18)
+        let right = page.column([sections[1],sections[6],sections[3]],spacing:18)
         for column in [left,right] {
             page.size(column,360,nil)
             for section in column.arrangedSubviews { section.widthAnchor.constraint(equalTo:column.widthAnchor).isActive = true }
         }
         let columns = NSStackView(views:[left,right]); columns.alignment = .top; columns.spacing = 24
         let version = Bundle.main.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String
-        let footer = page.text(version.map { "Version \($0) · Typing preview text stays in memory and is never saved." } ?? "Typing preview text stays in memory and is never saved.",size:11,color:.tertiaryLabelColor)
+        let footer = page.text(version.map { "Version \($0) · Text and handwriting stay in memory and are never saved." } ?? "Text and handwriting stay in memory and are never saved.",size:11,color:.tertiaryLabelColor)
         let guide = NSButton(title:"Setup Guide…",target:self,action:#selector(showSetup)); guide.bezelStyle = .push; guide.controlSize = .small
         let footerSpacer = NSView(); footerSpacer.setContentHuggingPriority(.defaultLow,for:.horizontal)
         let footerRow = NSStackView(views:[footer,footerSpacer,guide]); footerRow.alignment = .centerY
         let content = page.column([header,columns,footerRow],spacing:22)
         footerRow.widthAnchor.constraint(equalTo:content.widthAnchor).isActive = true
         header.widthAnchor.constraint(equalTo:content.widthAnchor).isActive = true
-        let root = NSView()
+        let root = SettingsDocumentView()
         root.addSubview(content); content.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             content.leadingAnchor.constraint(equalTo:root.leadingAnchor,constant:28),
@@ -809,12 +914,22 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMen
             content.bottomAnchor.constraint(equalTo:root.bottomAnchor,constant:-22)])
         // Slightly soft bottom pin so the window can animate its height as help appears.
         if let bottom = root.constraints.first(where:{ $0.firstAnchor == content.bottomAnchor || $0.secondAnchor == content.bottomAnchor }) { bottom.priority = .init(999) }
-        settings.contentView = root
+        let scroll = NSScrollView(); scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true
+        scroll.drawsBackground = false; scroll.documentView = root
+        root.translatesAutoresizingMaskIntoConstraints = false
+        scroll.widthAnchor.constraint(equalToConstant:800).isActive = true
+        root.widthAnchor.constraint(equalTo:scroll.contentView.widthAnchor).isActive = true
+        settingsDocument = root
+        let limit = max(500,(NSScreen.main?.visibleFrame.height ?? 1000)-80)
+        settingsViewportHeight = scroll.heightAnchor.constraint(equalToConstant:min(root.fittingSize.height,limit))
+        settingsViewportHeight?.isActive = true
+        settings.contentView = scroll
         settingsMotionViews = [header] + sections + [footerRow]
         refreshKeyboardPreview(animated:false)
-        settings.setContentSize(root.fittingSize); settings.center()
+        settings.setContentSize(scroll.fittingSize); resizeSettingsToFit(animated:false); settings.center()
     }
     @objc func showSettings() {
+        clearInputAssistance(restoreHandwritingFocus:false)
         let appearing = !settings.isVisible
         NSApp.activate(ignoringOtherApps:true); settings.makeKeyAndOrderFront(nil)
         if appearing {
@@ -831,6 +946,12 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMen
     func resizeSettingsToFit(animated:Bool) {
         guard let root = settings.contentView else { return }
         root.layoutSubtreeIfNeeded()
+        if let document = settingsDocument,let height = settingsViewportHeight {
+            let limit = max(500,(settings.screen?.visibleFrame.height ?? 1000)-80)
+            let size = document.fittingSize
+            height.constant = min(size.height,limit)
+            document.setFrameSize(NSSize(width:root.bounds.width,height:size.height))
+        }
         var frame = settings.frameRect(forContentRect:CGRect(origin:.zero,size:root.fittingSize))
         frame.origin = CGPoint(x:settings.frame.minX,y:settings.frame.maxY-frame.height)
         settings.setFrame(frame,display:true,animate:animated && settings.isVisible && !SettingsMotion.reduced)
@@ -890,11 +1011,11 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMen
         roomyLayout = layoutPicker.indexOfSelectedItem == 0
         UserDefaults.standard.set(roomyLayout ? "ipad" : "compact",forKey:"keyboardLayout")
         keyboard.cancelRepeats(); heldModifiers.removeAll(); usedDuringHold.removeAll(); resetModifiers()
-        panel.minSize = NSSize(width:460,height:roomyLayout ? 300 : 225)
+        panel.minSize = NSSize(width:460,height:minimumKeyboardHeight)
         keyboard.setPage(0)
         if let screen = selectedScreen,panel.isVisible {
             var frame = panel.frame
-            if roomyLayout { frame.size.height = max(340,frame.height) }
+            if roomyLayout { frame.size.height = max(minimumKeyboardHeight,frame.height) }
             adjustPanel(frame,resizing:true); rememberPanelFrame(); show(on:screen,field:nil)
         }
         refreshKeyboardPreview()
@@ -923,6 +1044,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMen
             }
         }
         syncDisplayPickers()
+        applyRequestedDefaultHeight()
         if selectedScreen == nil { hideKeyboard() }
         updateSetupStatus()
     }
@@ -972,7 +1094,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMen
     }
     func updateSnapAppearance() {
         keyboard?.snap.selected = snapEnabled
-        keyboard?.snap.toolTip = snapEnabled ? "Snap is on. Drag the header to the top or bottom edge to dock; tap to float." : "Snap: tap, then drag the header to the top or bottom edge to dock."
+        keyboard?.snap.toolTip = KeyboardHelp.snap(snapEnabled)
         keyboard?.snap.setAccessibilityValue(snapEnabled ? "On" : "Off")
         if let snapCandidate { keyboard?.heading.stringValue = "Release to dock at the \(snapCandidate.rawValue)" }
         else { keyboard?.heading.stringValue = "" }
@@ -997,6 +1119,8 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMen
         hideKeyboard(); resetModifiers()
     }
     func hideKeyboard() {
+        clearInputAssistance()
+        if keyboard?.handwritingMode == true { keyboard.setHandwritingMode(false) }
         keyboard?.typingPreview.update(.empty)
         keyboard?.cancelRepeats()
         panel.orderOut(nil)
@@ -1005,7 +1129,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMen
         keyboard?.updateModifiers(effectiveModifiers)
     }
     @objc func quit() { keyboard.cancelRepeats(); restoreFittedWindow(); NSApp.terminate(nil) }
-    func applicationWillTerminate(_ notification:Notification) { keyboard?.cancelRepeats(); restoreFittedWindow() }
+    func applicationWillTerminate(_ notification:Notification) { clearInputAssistance(); keyboard?.cancelRepeats(); restoreFittedWindow() }
     func resetModifiers() { modifiers = modifiers.intersection(["Caps"]); keyboard?.updateModifiers(effectiveModifiers) }
     func keyTouchChanged(_ spec:KeySpec,down:Bool) {
         guard momentaryModifiers.contains(spec.label) else { return }
@@ -1058,7 +1182,6 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMen
         if !appEnabled || adjustingPanel { return }
         var rect = customFrames[String(displayID(screen))].map { fitPanel(NSRectFromString($0),to:screen.visibleFrame) }
             ?? FocusRules.panelRect(screen:screen.visibleFrame,field:field)
-        if roomyLayout,customFrames[String(displayID(screen))] == nil { rect.size.height = max(rect.height,min(365,screen.visibleFrame.height*0.46)) }
         rect = fitPanel(rect,to:screen.visibleFrame)
         if customFrames[String(displayID(screen))] == nil,currentDock == nil,let field,rect.intersects(field) {
             rect.origin.y = screen.visibleFrame.maxY-rect.height-12
@@ -1074,12 +1197,13 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMen
     func fitPanel(_ frame:CGRect,to screen:CGRect) -> CGRect {
         var rect = frame
         rect.size.width = min(screen.width,max(460,rect.width))
-        rect.size.height = min(screen.height,max(roomyLayout ? 300 : 225,rect.height))
+        rect.size.height = min(screen.height,max(minimumKeyboardHeight,rect.height))
         rect.origin.x = min(screen.maxX - rect.width,max(screen.minX,rect.origin.x))
         rect.origin.y = min(screen.maxY - rect.height,max(screen.minY,rect.origin.y))
         return rect
     }
     func beginPanelAdjustment(resizing:Bool) {
+        clearInputAssistance()
         adjustmentStartFrame = panel.frame; adjustmentStartDock = currentDock
         adjustingPanel = true; snapCandidate = nil
         keyboard.needsLayout = true
@@ -1220,6 +1344,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMen
             setRuntime("Turn Sidecar On-Screen Keyboard on from the menu-bar switch to resume.")
             return
         }
+        if keepHandwritingFocusSession() { touchAssistant.dismissAll(); return }
         touchAssistant.update()
         guard let screen = selectedScreen else {
             setRuntime("Choose your iPad under Display. If it is missing, connect Sidecar and refresh.")
@@ -1230,7 +1355,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMen
         let pid = front.processIdentifier
         if activePID != pid { restoreFittedWindow(); skippedFitWindow = nil }
         let element = focusedElement(pid:pid)
-        if activePID != pid || (element != nil && activeElement != nil && !CFEqual(element!,activeElement!)) { resetModifiers(); keyboard.typingPreview.update(.empty) }
+        if activePID != pid || (element != nil && activeElement != nil && !CFEqual(element!,activeElement!)) { resetModifiers(); keyboard.typingPreview.update(.empty); clearInputAssistance() }
         activePID = pid
         activeElement = element
         guard let element else {
@@ -1256,47 +1381,12 @@ final class Controller: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMen
             setRuntime("Waiting for a text field on \(screen.localizedName).")
         }
     }
-    func updateTypingPreview() {
-        // Never fetch a field value while hidden, disabled, or untrusted.
-        guard appEnabled,showTypingPreview,panel?.isVisible == true,!adjustingPanel,AXIsProcessTrusted(),
-              let pid = touchAssistant?.focusedApplicationPID,let element = focusedElement(pid:pid) else {
-            keyboard?.typingPreview.update(.empty); return
-        }
-        let role = attribute(element,kAXRoleAttribute) as? String ?? ""
-        let subrole = attribute(element,kAXSubroleAttribute) as? String ?? ""
-        let editable = attribute(element,"AXEditable") as? Bool ?? false
-        let protected = attribute(element,"AXProtectedContent") as? Bool ?? false
-        guard TypingPreviewPolicy.canRead(enabled:showTypingPreview,visible:true,trusted:true,role:role,subrole:subrole,editable:editable,protected:protected) else {
-            keyboard.typingPreview.update(TypingPreviewPolicy.sensitive(role:role,subrole:subrole,protected:protected) ? .init(state:.secure) : .empty)
-            return
-        }
-        var selection:NSRange?
-        if let raw = attribute(element,kAXSelectedTextRangeAttribute),CFGetTypeID(raw) == AXValueGetTypeID() {
-            var range = CFRange(location:0,length:0)
-            if AXValueGetValue(raw as! AXValue,.cfRange,&range),range.location >= 0,range.length >= 0 {
-                selection = NSRange(location:range.location,length:range.length)
-            }
-        }
-        // Prefer a small range around the caret over copying an entire document.
-        if let count = (attribute(element,kAXNumberOfCharactersAttribute) as? NSNumber)?.intValue,count >= 0 {
-            let caret = TypingPreviewPolicy.caret(selection,total:count)
-            let range = TypingPreviewPolicy.range(total:count,caret:caret)
-            var cfRange = CFRange(location:range.location,length:range.length)
-            if let parameter = AXValueCreate(.cfRange,&cfRange) {
-                var raw:CFTypeRef?
-                if AXUIElementCopyParameterizedAttributeValue(element,kAXStringForRangeParameterizedAttribute as CFString,parameter,&raw) == .success,let text = raw as? String {
-                    keyboard.typingPreview.update(.init(state:.value,text:text,caret:caret-range.location,clippedBefore:range.location>0,clippedAfter:NSMaxRange(range)<count))
-                    return
-                }
-            }
-        }
-        let raw = attribute(element,kAXValueAttribute)
-        if let text = raw as? String { keyboard.typingPreview.update(.value(text,selection:selection)) }
-        else if let attributed = raw as? NSAttributedString { keyboard.typingPreview.update(.value(attributed.string,selection:selection)) }
-        else { keyboard.typingPreview.update(.init(state:.unavailable)) }
-    }
+    func updateTypingPreview() { refreshInputAssistance() }
     func performEditing(_ title:String,pid:pid_t? = nil,element:AXUIElement? = nil) {
         guard appEnabled else { return }
+        if handwritingTarget != nil {
+            afterHandwritingFocus { [weak self] in self?.performEditing(title,pid:pid,element:element) }; return
+        }
         let shortcuts:[String:(CGKeyCode,Set<String>)] = ["Undo":(6,["⌘"]),"Redo":(6,["⌘","Shift"]),"Cut":(7,["⌘"]),"Copy":(8,["⌘"]),"Paste":(9,["⌘"]),"Select All":(0,["⌘"])]
         guard let (code,mods) = shortcuts[title],let targetPID = pid ?? activePID,
               AXIsProcessTrusted(),NSWorkspace.shared.frontmostApplication?.processIdentifier == targetPID,
@@ -1631,6 +1721,7 @@ func selfTest() {
     RunLoop.main.run(until:Date().addingTimeInterval(0.05))
     holdPanel.orderOut(nil)
     check(pressCount == 2,"a quick tap on a page key still acts once on release")
+    InputAssistanceChecks.run(check)
     print("PASS: \(count) checks. Physical Sidecar touch and cross-app typing still require an interactive test.")
 }
 
@@ -1642,14 +1733,23 @@ func renderPreviews(to directory:String) {
         view.typingPreview.update(.value("Typing stays visible here"))
         let window = KeyboardPanel(contentRect:CGRect(x:0,y:0,width:1060,height:350),styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false)
         window.contentView = view
-        view.frame = CGRect(x:0,y:0,width:1060,height:350)
-        view.layoutSubtreeIfNeeded()
-        guard let rep = view.bitmapImageRepForCachingDisplay(in:view.bounds) else { continue }
-        view.cacheDisplay(in:view.bounds,to:rep)
-        guard let png = rep.representation(using:.png,properties:[:]) else { continue }
-        let path = URL(fileURLWithPath:directory).appendingPathComponent(dark ? "keyboard-dark.png" : "keyboard-light.png")
-        do { try png.write(to:path); print("Rendered \(path.path)") }
-        catch { fputs("Render failed: \(error)\n",stderr); exit(1) }
+        view.frame = CGRect(x:0,y:0,width:1060,height:394)
+        window.setContentSize(view.frame.size)
+        view.showSuggestions([TextSuggestion(range:NSRange(location:0,length:0),replacement:"typing"),TextSuggestion(range:NSRange(location:0,length:0),replacement:"type"),TextSuggestion(range:NSRange(location:0,length:0),replacement:"typed")])
+        func save(_ name:String) {
+            view.layoutSubtreeIfNeeded()
+            guard let rep = view.bitmapImageRepForCachingDisplay(in:view.bounds) else { return }
+            view.cacheDisplay(in:view.bounds,to:rep)
+            guard let png = rep.representation(using:.png,properties:[:]) else { return }
+            let path = URL(fileURLWithPath:directory).appendingPathComponent(name)
+            do { try png.write(to:path); print("Rendered \(path.path)") }
+            catch { fputs("Render failed: \(error)\n",stderr); exit(1) }
+        }
+        save(dark ? "keyboard-dark.png" : "keyboard-light.png")
+        view.setHandwritingMode(true)
+        view.handwriting.canvas.setExample(InputAssistanceChecks.exampleInk())
+        view.showHandwritingResult("hello",text:"hello")
+        save(dark ? "handwriting-dark.png" : "handwriting-light.png")
     }
     KeyboardStyle.previewDark = false
     let controls = TouchAssistant(owner:owner).windowControlView(preview:true)
@@ -1729,6 +1829,7 @@ func renderWindow(_ window:NSWindow,dark:Bool,name:String,to directory:String) {
 }
 
 let app = NSApplication.shared
+if CommandLine.arguments.contains("--recognition-smoke-test") { InputAssistanceChecks.recognitionSmokeTest(); exit(0) }
 if CommandLine.arguments.contains("--self-test") { selfTest(); exit(0) }
 if let index = CommandLine.arguments.firstIndex(of:"--render-previews"),CommandLine.arguments.count > index+1 {
     renderPreviews(to:CommandLine.arguments[index+1]); exit(0)

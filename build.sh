@@ -13,7 +13,7 @@ iconutil -c icns "${ICON_ASSETS}/AppIcon.iconset" -o "${APP_DIR}/Contents/Resour
 cp "${ICON_ASSETS}/AppIcon-preview.png" "${DELIVERY_DIR}/AppIcon-preview.png"
 cp "${ICON_ASSETS}/AppIcon-1024.png" "${DELIVERY_DIR}/AppIcon-1024.png"
 cp "${SOURCE_DIR}/assets/AppIcon.svg" "${DELIVERY_DIR}/AppIcon.svg"
-swiftc -swift-version 5 -O -module-cache-path "${CACHE_DIR}" -target arm64-apple-macos27.0 -framework AppKit -framework ApplicationServices "${SOURCE_DIR}"/src/*.swift -o "${APP_DIR}/Contents/MacOS/SidecarKeys"
+swiftc -swift-version 5 -O -module-cache-path "${CACHE_DIR}" -target arm64-apple-macos27.0 -framework AppKit -framework ApplicationServices -framework PencilKit -framework Vision "${SOURCE_DIR}"/src/*.swift -o "${APP_DIR}/Contents/MacOS/SidecarKeys"
 cat > "${APP_DIR}/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -23,8 +23,8 @@ cat > "${APP_DIR}/Contents/Info.plist" <<PLIST
 <key>CFBundleName</key><string>Sidecar On-Screen Keyboard</string>
 <key>CFBundleDisplayName</key><string>Sidecar On-Screen Keyboard</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>
-<key>CFBundleVersion</key><string>17</string>
-<key>CFBundleShortVersionString</key><string>1.0</string>
+<key>CFBundleVersion</key><string>22</string>
+<key>CFBundleShortVersionString</key><string>1.1</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>LSMinimumSystemVersion</key><string>27.0</string>
 <key>LSUIElement</key><true/>

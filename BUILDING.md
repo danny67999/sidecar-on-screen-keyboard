@@ -32,13 +32,14 @@ Open your build, grant its requested Accessibility permission yourself, then sel
 
 ```sh
 'build/Sidecar On-Screen Keyboard.app/Contents/MacOS/SidecarKeys' --self-test
+'build/Sidecar On-Screen Keyboard.app/Contents/MacOS/SidecarKeys' --recognition-smoke-test
 mkdir -p build/previews
 'build/Sidecar On-Screen Keyboard.app/Contents/MacOS/SidecarKeys' --render-previews "$PWD/build/previews"
 ```
 
-The built-in checks cover focus rules, layouts, geometry, modifiers, repeat, preview privacy guards and pause behavior. Physical Sidecar and cross-app behavior still need hands-on testing.
+The built-in checks cover focus rules, layouts, geometry, modifiers, repeat, preview privacy guards, suggestion ranges/cancellation, handwriting state and pause behavior. Physical Sidecar and cross-app behavior still need hands-on testing.
 
-`--diagnostics` optionally writes geometry and gesture counters to `runtime.json` beside the compiled source tree. It does not record typed text or clipboard values. Diagnostics are disabled during normal launches. Generated files are excluded from Git.
+`--diagnostics` optionally writes geometry, gesture counters and focus metadata to `runtime.json` beside the compiled source tree. It does not record typed text or clipboard values. Diagnostics are disabled during normal launches. Generated files are excluded from Git. `--handwriting-pad` opens the real pad directly for developer interaction checks without opening Settings.
 
 ## Distribution signing
 

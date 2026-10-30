@@ -17,3 +17,6 @@ tools/*
 assets/*
 !assets/app-icon.png
 !assets/AppIcon.svg
+!assets/keyboard-dark.png
+!assets/handwriting-dark.png
+!assets/window-controls.png

@@ -141,6 +141,7 @@ final class TouchAssistant {
         func make(_ title:String,_ level:NSWindow.Level) -> KeyboardPanel {
             let panel = KeyboardPanel(contentRect:.zero,styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false)
             panel.title = title; panel.level = level
+            panel.allowsToolTipsWhenApplicationIsInactive = true
             panel.backgroundColor = .clear; panel.isOpaque = false; panel.hasShadow = true
             panel.hidesOnDeactivate = false; panel.isReleasedWhenClosed = false
             panel.collectionBehavior = [.canJoinAllSpaces,.fullScreenAuxiliary,.ignoresCycle]
