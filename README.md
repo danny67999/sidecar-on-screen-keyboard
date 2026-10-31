@@ -92,8 +92,8 @@ No separate iPad companion app is required.
 
 ## Installation
 
-1. Download the app ZIP from [Releases](https://github.com/danny67999/sidecar-on-screen-keyboard/releases/latest), under **Assets**.
-2. Extract **Sidecar On-Screen Keyboard.app** and move it to Applications.
+1. Download the **arm64 DMG** from [Releases](https://github.com/danny67999/sidecar-on-screen-keyboard/releases/latest), under **Assets**.
+2. Open the DMG and drag **Sidecar On-Screen Keyboard.app** to **Applications**. The app ZIP is also available if preferred.
 3. Open it and follow the Setup Guide.
 4. Enable its Accessibility permission in System Settings.
 5. Connect your iPad through Sidecar, then choose the iPad display in the app.
@@ -117,10 +117,10 @@ Report bugs through [GitHub Issues](https://github.com/danny67999/sidecar-on-scr
 
 Source is available for personal, noncommercial study, use, modification and sharing under the **[Noncommercial Source-Available License 1.0](LICENSE)**.
 
-**Commercial use requires Daniel Hanna's prior written permission. This includes paid work, business operations, selling copies, paid services and using the code in commercial products.** Redistributed versions/modifications must include corresponding source under the same terms.
+**Commercial use requires the copyright holder's prior written permission. This includes paid work, business operations, selling copies, paid services and using the code in commercial products.** Redistributed versions/modifications must include corresponding source under the same terms.
 
 [Browse version 1.1 source](https://github.com/danny67999/sidecar-on-screen-keyboard/tree/v1.1) or [download its source ZIP](https://github.com/danny67999/sidecar-on-screen-keyboard/releases/download/v1.1/Sidecar-On-Screen-Keyboard-1.1-source.zip). See [Building from source](BUILDING.md).
 
-These are source-available terms, **not an OSI-approved open-source license**. Public source does not grant commercial permission. Contact Daniel Hanna through this repository for separate written terms.
+These are source-available terms, **not an OSI-approved open-source license**. Public source does not grant commercial permission. Contact the project owner through this repository for separate written terms.
 
 *This independent project is not affiliated with or endorsed by Apple.*

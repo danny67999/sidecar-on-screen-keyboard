@@ -1,6 +1,6 @@
 # Building from source
 
-This source is available under the repository's [noncommercial source-available license](LICENSE). Commercial use, including using the app for paid work, requires prior written permission from Daniel Hanna. Redistributed versions must include corresponding source under the same terms.
+This source is available under the repository's [noncommercial source-available license](LICENSE). Commercial use, including using the app for paid work, requires prior written permission from the copyright holder. Redistributed versions must include corresponding source under the same terms.
 
 ## Requirements
 
@@ -18,7 +18,7 @@ zsh build.sh
 
 The app is created at `build/Sidecar On-Screen Keyboard.app`. Icon files are generated in `build/icon-assets`. Nothing is installed automatically, and the script does not grant Accessibility permission.
 
-The default build is ad hoc signed for development. It does not carry the project's Developer ID signature or Apple notarization ticket. For a build that already has those, use the app ZIP from Releases.
+The default build is ad hoc signed for development. It does not carry the project's Developer ID signature or Apple notarization ticket. For a build that already has those, use the app DMG or ZIP from Releases.
 
 For a separate development identity and preferences domain:
 
